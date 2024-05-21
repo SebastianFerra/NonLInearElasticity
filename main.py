@@ -1,0 +1,90 @@
+from ngsolve import *
+from netgen.geom2d import SplineGeometry
+from netgen.NgOCC import *
+
+import problems
+import numpy as np
+import params
+
+class Gel():
+    """
+    Only properties for a specific gel, not problem specific
+    """
+    def __init__(self, gel):
+        self.phi0 = gel['phi0']
+        self.chi = gel['chi']
+        self.G = gel['G']
+        
+        
+
+class Geomerty():
+    def __init__(self, geom_path):
+        self.geometry = self.get_geom(geom_path)
+
+    def get_geom(self, geom_path):
+        self.geometry = LoadOCCGeometry(geom_path)   
+
+    def mesher(self,h=0.1):
+        self.geometry = self.geometry.GenerateMesh(maxh=h)
+        return self.geometry
+        
+
+class GelSolver():
+    """
+    Here we define the problem specific properties (constants and such)
+    """
+    def __init__(self, gel, geom, BC,h=1):
+        self.gel = Gel(gel)
+        self.geom = Geomerty(geom)
+        self.mesh = self.geom.mesher(h)
+        self.fes = VectorH1(self.mesh, order=2, dirichletx = BC["x"], dirichlety = BC["y"], dirichletz = BC["z"])
+        self.u = self.fes.TrialFunction()
+        self.F = Id(3) + Grad(self.u)
+        self.BF = BilinearForm(self.fes, symmetric = True)
+        self.Assebled = False
+        self.KBTV = params.KBTV
+        
+    def Assemble_Bilinear_Form(self, form):
+        """
+        Remember to set parameters as NGsolve parameter objects
+        """
+        J = Det(self.F)
+        gamma = self.gel.G/self.KBTV
+        if form == "EDP":
+            """
+            Analitically calculated variation of the energy
+            """
+            pass
+        elif form == "Functional":
+            """
+            Nuerically calculated variation of the energy
+            """
+            self.BF += Variation (((1/params.N)  * self.gel.phi0 * Log(self.gel.phi0/J) + (J - self.gel.phi0)*Log(1-self.gel.phi0/J) + self.gel.phi0*self.gel.chi * Log(1-self.gel.phi0/J)).Compile()*dx)
+            self.BF += Variation ((Trace(self.F.trans * self.F)*gamma * 0.5).Compile()*dx)
+        self.Assebled = True
+    
+    def NewtonSolver(self, MAX_ITS=100, tol=1e-6):
+        self.u = GridFunction(self.fes)
+        self.u.vec[:] = 0
+
+        self.res = self.u.vec.CreateVector()
+        self.w = self.u.vec.CreateVector()
+        # here one should calculate the lambda target and stuff
+        lams = np.linspace(0,1,20) # newton dampers
+        for lam in range(lams):
+            for it in range(MAX_ITS):
+                self.BF.Apply(self.u,self.res)
+                self.BF.AssembleLinearization(self.u)
+                self.inv = self.BF.mat.Inverse(self.fes.FreeDofs())
+                self.w.data = self.inv * self.res
+                self.u.vec.data -= lam * self.w
+                Draw(self.u, self.mesh, "u")
+        return self.u.vec.data
+test = LoadOCCGeometry("box.step")
+Draw(test)
+problem = problems.problem1
+
+solver = GelSolver(*problem)
+Draw(solver.gel.geometry)
+
+
