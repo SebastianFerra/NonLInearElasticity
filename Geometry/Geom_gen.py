@@ -15,5 +15,5 @@ box.faces.Min(X).name = "front"
 box.faces.Max(Z).name = "right"
 box.faces.Min(Z).name = "left"
 
-box.WriteStep("StepGeoms/box.step")
+box.WriteStep("box.stp")
 

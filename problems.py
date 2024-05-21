@@ -5,6 +5,6 @@ problem1 = [gel params as dict, geom of problem as string,
 """
 
 problem1 = [{"chi" :1, "phi0" : 0.5, "G": 0.13},
-            "box.step",
+            "box.stp",
             {"x":"front", "y": "bottom" , "z":"left"}
             ]

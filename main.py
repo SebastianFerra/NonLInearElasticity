@@ -1,6 +1,6 @@
 from ngsolve import *
 from netgen.geom2d import SplineGeometry
-from netgen.NgOCC import *
+from netgen.occ import *
 
 import problems
 import numpy as np
@@ -22,10 +22,11 @@ class Geomerty():
         self.geometry = self.get_geom(geom_path)
 
     def get_geom(self, geom_path):
-        self.geometry = LoadOCCGeometry(geom_path)   
+        return OCCGeometry(geom_path)   
 
     def mesher(self,h=0.1):
         self.geometry = self.geometry.GenerateMesh(maxh=h)
+
         return self.geometry
         
 
@@ -36,7 +37,7 @@ class GelSolver():
     def __init__(self, gel, geom, BC,h=1):
         self.gel = Gel(gel)
         self.geom = Geomerty(geom)
-        self.mesh = self.geom.mesher(h)
+        self.mesh = Mesh(self.geom.mesher(h))
         self.fes = VectorH1(self.mesh, order=2, dirichletx = BC["x"], dirichlety = BC["y"], dirichletz = BC["z"])
         self.u = self.fes.TrialFunction()
         self.F = Id(3) + Grad(self.u)
@@ -78,13 +79,11 @@ class GelSolver():
                 self.inv = self.BF.mat.Inverse(self.fes.FreeDofs())
                 self.w.data = self.inv * self.res
                 self.u.vec.data -= lam * self.w
-                Draw(self.u, self.mesh, "u")
         return self.u.vec.data
-test = LoadOCCGeometry("box.step")
-Draw(test)
 problem = problems.problem1
 
 solver = GelSolver(*problem)
-Draw(solver.gel.geometry)
+solver.mesh.ngmesh.Save("mesh.vol")
+
 
 
