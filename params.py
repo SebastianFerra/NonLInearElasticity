@@ -1,6 +1,6 @@
 ### Problem params
 N = 1000
-KBTV = 10
+KBTV = 136.6
 
 
 
