@@ -42,6 +42,7 @@ class GelSolver():
         self.mesh = Mesh(self.geom.mesher(h))
         self.fes = VectorH1(self.mesh, order=2, dirichletx = BC["x"], dirichlety = BC["y"], dirichletz = BC["z"])
         self.u = self.fes.TrialFunction()
+        self.v = self.fes.TestFunction()
         self.F = Id(3) + Grad(self.u)
         self.BF = BilinearForm(self.fes, symmetric = True)
         self.Assembled = False
@@ -57,11 +58,16 @@ class GelSolver():
             """
             Analitically calculated variation of the energy
             """
-
-            pass
+            # add F term
+            self.BF += gamma * InnerProduct(self.F,Grad(self.v)) * dx
+            # add non-linear term
+            self.BF += -(1/params.N)*InnerProduct(Inv(self.F).trans,Grad(self.v)) * dx
+            self.BF += J * InnerProduct(Inv(self.F).trans,Grad(self.v)) * log(1-self.gel.phi0/J) * dx
+            self.BF += self.gel.phi0  * InnerProduct(Inv(self.F).trans,Grad(self.v)) * dx
+            self.BF += self.gel.phi0**2 * self.gel.chi * InnerProduct(Inv(self.F).trans,Grad(self.v)) * dx
         elif form == "Functional":
             """
-            Nuerically calculated variation of the energy
+            Numerically calculated variation of the energy
             """
             self.BF += Variation (((1/params.N)  * self.gel.phi0 * log(self.gel.phi0/J) + (J - self.gel.phi0)*log(1-self.gel.phi0/J) + self.gel.phi0*self.gel.chi * log(1-self.gel.phi0/J)).Compile()*dx)
             self.BF += Variation ((Trace(self.F.trans * self.F)* gamma * 0.5).Compile()*dx)
@@ -79,7 +85,7 @@ class GelSolver():
         self.history = GridFunction(self.fes, multidim = 0)
 
         # here one should calculate the lambda target and stuff
-        lams = np.linspace(0,1,10) # newton dampers
+        lams = np.linspace(0,1,5) # newton dampers
         with alive_progress.alive_bar(len(lams)*MAX_ITS) as bar:
             for lam in lams:
                 for it in range(MAX_ITS):
@@ -97,12 +103,14 @@ problem_n = problem.pop(-1)
 
 solver = GelSolver(*problem)
 
-solver.Assemble_Bilinear_Form("Functional")
+# solver.Assemble_Bilinear_Form("Functional")
+form = "Functional"
+solver.Assemble_Bilinear_Form(form)
 
-u = solver.NewtonSolver(MAX_ITS=50)
+u = solver.NewtonSolver(MAX_ITS=20)
 
 
 solver.mesh.ngmesh.Save(f"Sol_Problem1/mesh.vol")
 pickle.dump(solver.mesh, open(f"Sol_Problem{problem_n}/mesh.pkl", "wb"))
-pickle.dump(solver.history, open(f"Sol_Problem{problem_n}/history.pkl", "wb"))
-pickle.dump(u, open(f"Sol_Problem{problem_n}/u.pkl", "wb"))
+pickle.dump(solver.history, open(f"Sol_Problem{problem_n}/history_{form}.pkl", "wb"))
+pickle.dump(u, open(f"Sol_Problem{problem_n}/u_{form}.pkl", "wb"))
