@@ -97,7 +97,7 @@ class GelSolver():
                     bar()
                 self.history.AddMultiDimComponent(self.u.vec)
                     
-        return self.u.vec.data
+        return self.u
 problem = problems.problem1
 problem_n = problem.pop(-1)
 
@@ -105,6 +105,7 @@ solver = GelSolver(*problem)
 
 # solver.Assemble_Bilinear_Form("Functional")
 form = "Functional"
+form = "EDP"
 solver.Assemble_Bilinear_Form(form)
 
 u = solver.NewtonSolver(MAX_ITS=20)
