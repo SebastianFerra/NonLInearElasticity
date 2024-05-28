@@ -53,8 +53,14 @@ class GelSolver():
         Remember to set parameters as NGsolve parameter objects
         """
         J = Det(self.F)
+        phi0 = self.gel.phi0
+        phi = self.gel.phi0
         gamma = self.gel.G/self.KBTV
+        print(gamma)
+        chi = self.gel.chi
+        F = self.F
         if form == "EDP":
+            print("Assembling using theorical variation")
             """
             Analitically calculated variation of the energy
             """
@@ -66,38 +72,48 @@ class GelSolver():
             self.BF += self.gel.phi0  * InnerProduct(Inv(self.F).trans,Grad(self.v)) * dx
             self.BF += self.gel.phi0**2 * self.gel.chi * InnerProduct(Inv(self.F).trans,Grad(self.v)) * dx
         elif form == "Functional":
+            print("Assembling using numerical variation")
             """
             Numerically calculated variation of the energy
             """
-            self.BF += Variation (((1/params.N)  * self.gel.phi0 * log(self.gel.phi0/J) + (J - self.gel.phi0)*log(1-self.gel.phi0/J) + self.gel.phi0*self.gel.chi * log(1-self.gel.phi0/J)).Compile()*dx)
-            self.BF += Variation ((Trace(self.F.trans * self.F)* gamma * 0.5).Compile()*dx)
+    
+            H = (J - phi0)*log(1-phi)  + phi0 * chi*(1-phi) + phi0/1000*log(phi)
+            C = F.trans * F
+            BF =  0.5*gamma*(Trace(C)) + H
+            self.BF += Variation(BF.Compile() * dx)
         self.Assembled = True
     
-    def NewtonSolver(self, MAX_ITS=100, tol=1e-6, damp = 0.1):
+    def NewtonSolver(self, MAX_ITS=100, tol=1e-6, damp = 0.5):
         
         if not self.Assembled:
             raise Exception("Bilinear form not assembled")
-        self.u = GridFunction(self.fes)
-        self.u.vec[:] = 0
+        self.gfu = GridFunction(self.fes)
+        self.gfu.vec[:] = 0
 
-        self.res = self.u.vec.CreateVector()
-        self.w = self.u.vec.CreateVector()
+        self.res = self.gfu.vec.CreateVector()
+        self.w = self.gfu.vec.CreateVector()
         self.history = GridFunction(self.fes, multidim = 0)
 
         # here one should calculate the lambda target and stuff
-        lams = np.linspace(0,1,5) # newton dampers
-        with alive_progress.alive_bar(len(lams)*MAX_ITS) as bar:
-            for lam in lams:
-                for it in range(MAX_ITS):
-                    self.BF.Apply(self.u.vec, self.res)
-                    self.BF.AssembleLinearization(self.u.vec)
-                    self.inv = self.BF.mat.Inverse(self.fes.FreeDofs())
-                    self.w.data = self.inv * self.res
-                    self.u.vec.data -= lam * damp *self.w
-                    bar()
-                self.history.AddMultiDimComponent(self.u.vec)
+        # self.lams = np.linspace(0,1,5) # newton dampers
+        self.lams = [1]
+        for lam in self.lams:
+            for it in range(MAX_ITS):
+                print(self.BF.Energy(self.gfu.vec))
+                self.BF.Apply(self.gfu.vec, self.res)
+                self.BF.AssembleLinearization(self.gfu.vec)
+                self.inv = self.BF.mat.Inverse(self.fes.FreeDofs())
+                damp = 0.5
+                self.w.data = damp*self.inv * self.res
+                self.gfu.vec.data -=  self.w
+                
+                stopcritval = sqrt(abs(InnerProduct(self.w,self.res)))
+                if stopcritval < tol:
+                    break
+
+                self.history.AddMultiDimComponent(self.gfu.vec)
                     
-        return self.u
+        return self.gfu
 problem = problems.problem1
 problem_n = problem.pop(-1)
 
@@ -105,10 +121,10 @@ solver = GelSolver(*problem)
 
 # solver.Assemble_Bilinear_Form("Functional")
 form = "Functional"
-form = "EDP"
+# form = "EDP"
 solver.Assemble_Bilinear_Form(form)
 
-u = solver.NewtonSolver(MAX_ITS=20)
+u = solver.NewtonSolver(MAX_ITS=250)
 
 
 solver.mesh.ngmesh.Save(f"Sol_Problem1/mesh.vol")
