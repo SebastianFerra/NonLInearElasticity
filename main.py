@@ -8,6 +8,9 @@ import params
 import pickle
 import alive_progress
 
+def Norm(vec):
+    return sqrt(abs(InnerProduct(vec,vec)))
+
 class Gel():
     """
     Only properties for a specific gel, not problem specific
@@ -44,11 +47,22 @@ class GelSolver():
         self.u = self.fes.TrialFunction()
         self.v = self.fes.TestFunction()
         self.F = Id(3) + Grad(self.u)
-        self.BF = BilinearForm(self.fes, symmetric = True)
+        self.BF = BilinearForm(self.fes)
         self.Assembled = False
         self.KBTV = params.KBTV
+
+    def Gel(self,F):
+        gamma = self.gel.G/self.KBTV
+        J = Det(F)
+        phi = self.gel.phi0/J
+        H = (J - self.gel.phi0)*log(1-phi)  + self.gel.phi0 * self.gel.chi*(1-phi) + self.gel.phi0/1000*log(phi)
+        return 0.5*gamma*Trace(F.trans*F ) + H
         
     def Assemble_Bilinear_Form(self, form):
+
+        self.BF += Variation(self.Gel(self.F).Compile()*dx)
+        self.Assembled = True
+        return 
         """
         Remember to set parameters as NGsolve parameter objects
         """
@@ -99,13 +113,15 @@ class GelSolver():
         self.lams = [1]
         for lam in self.lams:
             for it in range(MAX_ITS):
-                print(self.BF.Energy(self.gfu.vec))
+                print(Norm(self.gfu.vec))
                 self.BF.Apply(self.gfu.vec, self.res)
                 self.BF.AssembleLinearization(self.gfu.vec)
                 self.inv = self.BF.mat.Inverse(self.fes.FreeDofs())
+                
                 damp = 0.5
                 self.w.data = damp*self.inv * self.res
                 self.gfu.vec.data -=  self.w
+                print(Norm(self.w), Norm(self.res), Norm(self.gfu.vec))
                 
                 stopcritval = sqrt(abs(InnerProduct(self.w,self.res)))
                 if stopcritval < tol:

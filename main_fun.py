@@ -39,7 +39,8 @@ def Gel_energy_functional(F):
     H = (J - phi0)*log(1-phi)  + phi0 * chi*(1-phi) + phi0/1000*log(phi)
     return 0.5*gamma* Trace(F.trans*F ) + H
 
-def Gel_energy_EDP(F):
+def Gel_energy_EDP(F): ## |F|^2 + H => gamma F:Gradv + H'*J'
+    # ddet(A(t))/dt = det(A(t))*trace(A^-1(t)*Grad (v))
     gamma = G/KBTV
     J = Det(F)
     phi = phi0/J
@@ -53,7 +54,7 @@ def Gel_energy_EDP(F):
 fes = VectorH1(mesh, order=ord, dirichletx = BC["x"], dirichlety = BC["y"], dirichletz = BC["z"])
 u = fes.TrialFunction()
 v = fes.TestFunction()
-BF = BilinearForm(fes, symmetric = True)
+BF = BilinearForm(fes)
 F = Id(3) + Grad(u)
 
 ## Assemble forms
