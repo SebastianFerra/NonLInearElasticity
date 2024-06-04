@@ -31,6 +31,8 @@ mesh = mesher(geom, h)
 
 def F(u):
     return Id(3) + Grad(u)
+def Norm(vec):
+    return InnerProduct(vec, vec)**0.5
 
 def Gel_energy_functional(F):
     gamma = G/KBTV
@@ -69,14 +71,15 @@ def Assemble_Bilinear_Form(BF, F, form):
 form = "Functional"
 BF = Assemble_Bilinear_Form(BF, F, form)
 
-def Solver_freeswell(BF, gfu, tol=1e-8, maxiter=250, damp = 0.5):
+def Solver_freeswell(BF, gfu, tol=1e-8, maxiter=250, damp = 0.5, acc = False):
     """
     Solves the problem
     """
     res = gfu.vec.CreateVector()
     w = gfu.vec.CreateVector()
     history = GridFunction(fes, multidim = 0)
-    # here we may need to add another loop 
+    # here we may need to add another loop
+   
     for iter in range(maxiter):
         # Prints before the iteration: number of it, residual, energy
         print("Energy: ", BF.Energy(gfu.vec), "Residual: ", sqrt(abs(InnerProduct(res,res))), "Iteration: ", iter)
@@ -93,7 +96,7 @@ def Solver_freeswell(BF, gfu, tol=1e-8, maxiter=250, damp = 0.5):
 
 gfu = GridFunction(fes)
 gfu.vec[:] = 0
-gfu, history = Solver_freeswell(BF, gfu)
+gfu, history = Solver_freeswell(BF, gfu, acc = True)
 
 # pickle the results, history and mesh for later use
 pickle.dump(history, open(f"Sol_Problem{problem[-1]}/history_{form}.p", "wb"))
