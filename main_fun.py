@@ -16,10 +16,11 @@ chi = problem[0]['chi']
 G = problem[0]['G']
 geom = problem[1]
 BC = problem[2]
-h = 1
+h = 0.5
 ord = 2
 N = params.N
 KBTV = params.KBTV
+form = "EDP" # EDP //functional
 
 ## Generate mesh and geometry
 def mesher(geom, h):
@@ -68,7 +69,7 @@ def Assemble_Bilinear_Form(BF, F, form):
         BF += Gel_energy_EDP(F) * dx
         return BF
 
-form = "Functional"
+
 BF = Assemble_Bilinear_Form(BF, F, form)
 
 def Solver_freeswell(BF, gfu, tol=1e-8, maxiter=250, damp = 0.5, acc = False):
