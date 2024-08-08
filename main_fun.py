@@ -1,7 +1,10 @@
 from ngsolve import *
 from netgen.geom2d import SplineGeometry
-from netgen.occ import *
 
+from netgen.occ import *
+import netgen.meshing as ngm
+from ngsPETSc import NonLinearSolver
+from mpi4py.MPI import COMM_WORLD
 import problems
 import numpy as np
 import params
@@ -16,19 +19,22 @@ chi = problem[0]['chi']
 G = problem[0]['G']
 geom = problem[1]
 BC = problem[2]
-h = 0.5
+h = 1
 ord = 2
 N = params.N
 KBTV = params.KBTV
-form = "EDP" # EDP //functional
+form = "Functional" # EDP //functional
 
-## Generate mesh and geometry
+## Generate mesh and geometry ### add parallel stuff
 def mesher(geom, h):
     geo = OCCGeometry(geom)
-    mesh = Mesh(geo.GenerateMesh(maxh=h))
+    mesh = Mesh(geo.GenerateMesh(maxh=h).Distribute(COMM_WORLD))
     return mesh
+if COMM_WORLD.rank ==0:
 
-mesh = mesher(geom, h)
+    mesh = mesher(geom, h)
+else:
+    mesh = Mesh(ngm.Mesh.Receive(COMM_WORLD))
 
 def F(u):
     return Id(3) + Grad(u)
@@ -66,13 +72,13 @@ def Assemble_Bilinear_Form(BF, F, form):
         BF += Variation(Gel_energy_functional(F).Compile()*dx)
         return BF
     elif form == "EDP":
-        BF += Gel_energy_EDP(F) * dx
+        BF += Gel_energy_EDP(F).Compile() * dx
         return BF
 
 
 BF = Assemble_Bilinear_Form(BF, F, form)
 
-def Solver_freeswell(BF, gfu, tol=1e-8, maxiter=250, damp = 0.5, acc = False):
+def Solver_freeswell(BF, gfu, tol=1e-8, maxiter=250, damp = 0.5):
     """
     Solves the problem
     """
@@ -95,9 +101,24 @@ def Solver_freeswell(BF, gfu, tol=1e-8, maxiter=250, damp = 0.5, acc = False):
             break
     return gfu, history
 
+def petsc_solver(fes, BL, gfu):
+    solver = NonLinearSolver(fes = fes,a = BF,solverParameters={"snes_type": "newtonls",
+                                            "snes_max_it": 200,
+                                            "snes_monitor": "",
+                                            "ksp_type": "preonly",
+                                            "pc_type": "lu",
+                                            "snes_linesearch_type": "basic",
+                                            "snes_linesearch_damping": 1.0,
+                                            "snes_linesearch_max_it": 100})
+    gfu_petsc =solver.solve(gfu)
+    return gfu_petsc
+
 gfu = GridFunction(fes)
 gfu.vec[:] = 0
-gfu, history = Solver_freeswell(BF, gfu, acc = True)
+#gfu, history = Solver_freeswell(BF, gfu)
+
+
+print(gfu_petsc)
 
 # pickle the results, history and mesh for later use
 pickle.dump(history, open(f"Sol_Problem{problem[-1]}/history_{form}.p", "wb"))
