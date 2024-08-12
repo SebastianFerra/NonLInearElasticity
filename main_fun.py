@@ -9,7 +9,7 @@ import problems
 import numpy as np
 import params
 import pickle
-
+from time import time
 
 ## get problem parameters and geometry
 problem = problems.problem1
@@ -102,26 +102,30 @@ def Solver_freeswell(BF, gfu, tol=1e-8, maxiter=250, damp = 0.5):
     return gfu, history
 
 def petsc_solver(fes, BL, gfu):
-    solver = NonLinearSolver(fes = fes,a = BF,solverParameters={"snes_type": "newtonls",
-                                            "snes_max_it": 200,
+    solver = NonLinearSolver(fes = fes,a = BF,solverParameters={"snes_type": "qn",
+                                            "snes_max_it": 2000,
                                             "snes_monitor": "",
-                                            "ksp_type": "preonly",
-                                            "pc_type": "lu",
+                                            "snes_rtol": 1e-6,
                                             "snes_linesearch_type": "basic",
-                                            "snes_linesearch_damping": 1.0,
+                                            "snes_linesearch_damping": 0.3,
                                             "snes_linesearch_max_it": 100})
     gfu_petsc =solver.solve(gfu)
     return gfu_petsc
 
 gfu = GridFunction(fes)
 gfu.vec[:] = 0
+#t1 =  time()
 #gfu, history = Solver_freeswell(BF, gfu)
+#print("Time on ngsolve newton:", abs(t1-time()))
 
-
-print(gfu_petsc)
+#gfu = GridFunction(fes)
+#gfu.vec[:] = 0
+t1 = time() 
+gfu = petsc_solver(fes,BF, gfu)
+print("Time on snes newton:", abs(t1-time()))
 
 # pickle the results, history and mesh for later use
-pickle.dump(history, open(f"Sol_Problem{problem[-1]}/history_{form}.p", "wb"))
+#pickle.dump(history, open(f"Sol_Problem{problem[-1]}/history_{form}.p", "wb"))
 pickle.dump(gfu, open(f"Sol_Problem{problem[-1]}/gfu_{form}.p", "wb"))
 pickle.dump(mesh, open(f"Sol_Problem{problem[-1]}/mesh.p", "wb"))
 
