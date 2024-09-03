@@ -3,8 +3,8 @@ from netgen.geom2d import SplineGeometry
 
 from netgen.occ import *
 import netgen.meshing as ngm
-from ngsPETSc import NonLinearSolver
-from mpi4py.MPI import COMM_WORLD
+# from ngsPETSc import NonLinearSolver
+# from mpi4py.MPI import COMM_WORLD
 import problems
 import numpy as np
 import params
@@ -19,23 +19,18 @@ chi = problem[0]['chi']
 G = problem[0]['G']
 geom = problem[1]
 BC = problem[2]
-h = 1
+h = 0.4
 ord = 2
 N = params.N
 KBTV = params.KBTV
-form = "Functional" # EDP //functional
+form = "EDP" # EDP //functional
 
 ## Generate mesh and geometry ### add parallel stuff
 def mesher(geom, h):
     geo = OCCGeometry(geom)
-    mesh = Mesh(geo.GenerateMesh(maxh=h).Distribute(COMM_WORLD))
+    mesh = Mesh(geo.GenerateMesh(maxh=h))
     return mesh
-if COMM_WORLD.rank ==0:
-
-    mesh = mesher(geom, h)
-else:
-    mesh = Mesh(ngm.Mesh.Receive(COMM_WORLD))
-
+mesh = mesher(geom, h)
 def F(u):
     return Id(3) + Grad(u)
 def Norm(vec):
@@ -114,21 +109,20 @@ def petsc_solver(fes, BL, gfu):
 
 gfu = GridFunction(fes)
 gfu.vec[:] = 0
-#t1 =  time()
-#gfu, history = Solver_freeswell(BF, gfu)
-#print("Time on ngsolve newton:", abs(t1-time()))
+t1 =  time()
+gfu, history = Solver_freeswell(BF, gfu)
+print("Time on ngsolve newton:", abs(t1-time()))
 
 #gfu = GridFunction(fes)
-#gfu.vec[:] = 0
-t1 = time() 
-gfu = petsc_solver(fes,BF, gfu)
-print("Time on snes newton:", abs(t1-time()))
+# #gfu.vec[:] = 0
+# t1 = time() 
+# gfu = petsc_solver(fes,BF, gfu)
+# print("Time on snes newton:", abs(t1-time()))
 
 # pickle the results, history and mesh for later use
 #pickle.dump(history, open(f"Sol_Problem{problem[-1]}/history_{form}.p", "wb"))
-pickle.dump(gfu, open(f"Sol_Problem{problem[-1]}/gfu_{form}.p", "wb"))
-pickle.dump(mesh, open(f"Sol_Problem{problem[-1]}/mesh.p", "wb"))
-
-
-        
+# pickle.dump(gfu, open(f"Sol_Problem{problem[-1]}/gfu_{form}.p", "wb"))
+# pickle.dump(mesh, open(f"Sol_Problem{problem[-1]}/mesh.p", "wb"))
+vtk = VTKOutput(ma=mesh, coefs=[gfu], names=["u"], filename=f"freeswekk_EDP_{h}", subdivision=0)
+vtk.Do() 
 
