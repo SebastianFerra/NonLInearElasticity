@@ -22,7 +22,7 @@ G = problem[0]['G']
 geom = problem[1]
 BC = problem[2]
 h = 2
-ord = 2
+ord = 1
 N = params.N
 KBTV = params.KBTV
 form = "EDP" # EDP //functional
@@ -31,6 +31,7 @@ form = "EDP" # EDP //functional
 def mesher(geom, h):
     geo = OCCGeometry(geom)
     mesh = Mesh(geo.GenerateMesh(maxh=h))
+    print(mesh.GetBoundaries())
     return mesh
 mesh = mesher(geom, h)
 
@@ -42,9 +43,8 @@ def F(u):
 def Norm(vec):
     return InnerProduct(vec, vec)**0.5
 
-div_2D = lambda A: CoefficientFunction(A.Diff(x)+A.Diff(y)+A.Diff(z))
 def div_custom(A):
-    return CoefficientFunction((div_2D(A[0]), div_2D(A[1]), div_2D  (A[2])))
+    return CF((div(A[0]), div(A[1]), div(A[2])))
 
 def Gel_energy_EDP(F): ## |F|^2 + H => gamma F:Gradv + H'*J'
     # ddet(A(t))/dt = det(A(t))*trace(A^-1(t)*Grad (v))
@@ -57,26 +57,32 @@ def Gel_energy_EDP(F): ## |F|^2 + H => gamma F:Gradv + H'*J'
     edp = gamma * InnerProduct(F,dv) + H_prime * J * Trace(invF*dv)
     return edp
 
-def Gel_energy_mixed(F,v,P,T):
+def Gel_energy_mixed(F,v,Ptup,Ttup):
     gamma = G/KBTV
     J = Det(F)
-    
     phi = phi0/J
     invF = Inv(F)
     H_prime = -phi/N + log(1-phi) + phi + chi*phi**2
-    tens_eq = Trace((gamma*F + H_prime*J*invF.trans - P).trans * T)
-    div_eq = InnerProduct(div_custom(P),v) 
+    # P = F+H_prime*J*F^{-T}
+    Paux = CoefficientFunction((Ptup[0],Ptup[1],Ptup[2]), dims = (3,3))
+    Taux = CoefficientFunction((Ttup[0],Ttup[1],Ttup[2]), dims = (3,3))
+    tens_eq = InnerProduct( H_prime*J*invF.trans - Paux) , Taux)
+    temp = InnerProduct(gamma*( , Taux)
+                        trace(tau) + InnerProduct(\nabla u, tau)# integrar por partes
+    div_eq = InnerProduct(div_custom(Ptup),v) 
+    # agregar int((u1,u2,0) * tau.n) = 0 (this only on BC z = 0)
     return tens_eq + div_eq
 
 
 ## Generate spaces and forms
-fesU = VectorH1(mesh, order=ord, dirichletx = BC["x"], dirichlety = BC["y"], dirichletz = BC["z"])
-fesTensorP = MatrixValued(HDiv(mesh, order=ord-1))
-fes = fesU * fesTensorP
-u,P = fes.TrialFunction()
-P = P[:,:,0]
-v,T = fes.TestFunction()
-T = T[:,:,0]
+fesU = VectorL2(mesh, order=ord)
+fesP1 = HDiv(mesh, order=ord+1, dirichlet = "top|right|back")
+fesP = FESpace([fesP1, fesP1, fesP1])
+fes = fesU * fesP
+u,P1,P2,P3 = fes.TrialFunction()
+P = (P1,P2,P3)
+v,T1,T2,T3 = fes.TestFunction()
+T = (T1,T2,T3)
 BF = BilinearForm(fes)
 F = Id(3) + Grad(u)
 
