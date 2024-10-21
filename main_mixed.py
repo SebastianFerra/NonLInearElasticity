@@ -44,7 +44,7 @@ def Norm(vec):
 
 div_2D = lambda A: CoefficientFunction(A.Diff(x)+A.Diff(y)+A.Diff(z))
 def div_custom(A):
-    return CoefficientFunction((div_2D(A[0,:]), div_2D(A[1,:]), div_2D  (A[2,:])))
+    return CoefficientFunction((div_2D(A[0]), div_2D(A[1]), div_2D  (A[2])))
 
 def Gel_energy_EDP(F): ## |F|^2 + H => gamma F:Gradv + H'*J'
     # ddet(A(t))/dt = det(A(t))*trace(A^-1(t)*Grad (v))
@@ -60,19 +60,19 @@ def Gel_energy_EDP(F): ## |F|^2 + H => gamma F:Gradv + H'*J'
 def Gel_energy_mixed(F,v,P,T):
     gamma = G/KBTV
     J = Det(F)
+    
     phi = phi0/J
     invF = Inv(F)
-    tens_eq = Trace((gamma*F - (phi0 / N) * invF + log(1 - phi) * J * invF + phi0 * invF + (chi/J) * (phi0**2) * invF - P).trans * T)
-    print("int")
+    H_prime = -phi/N + log(1-phi) + phi + chi*phi**2
+    tens_eq = Trace((gamma*F + H_prime*J*invF.trans - P).trans * T)
     div_eq = InnerProduct(div_custom(P),v) 
-    
     return tens_eq + div_eq
 
 
 ## Generate spaces and forms
 fesU = VectorH1(mesh, order=ord, dirichletx = BC["x"], dirichlety = BC["y"], dirichletz = BC["z"])
 fesTensorP = MatrixValued(HDiv(mesh, order=ord-1))
-fes = fesU*fesTensorP
+fes = fesU * fesTensorP
 u,P = fes.TrialFunction()
 P = P[:,:,0]
 v,T = fes.TestFunction()
