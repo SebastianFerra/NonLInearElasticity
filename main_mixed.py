@@ -87,7 +87,7 @@ def Assemble_Bilinear_Form(BF, F,v=None,P=None,T=None, form = "Mixed"):
         
         return BF
 
-BF = Assemble_Bilinear_Form(BF, F)
+BF = Assemble_Bilinear_Form(BF, F,v,P,T)
 
 def Solver_freeswell(BF, gfu, tol=1e-8, maxiter=250, damp = 0.5):
     """
