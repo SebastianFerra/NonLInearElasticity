@@ -21,7 +21,7 @@ chi = problem[0]['chi']
 G = problem[0]['G']
 geom = problem[1]
 BC = problem[2]
-h = 1
+h = 2
 ord = 2
 N = params.N
 KBTV = params.KBTV
@@ -70,7 +70,7 @@ def Gel_energy_mixed(F,v,P,T):
 
 
 ## Generate spaces and forms
-fesU = VectorH1(mesh, order=ord, dirichletx = BC["x"], dirichtlety = BC["y"], dirichletz = BC["z"])
+fesU = VectorH1(mesh, order=ord, dirichletx = BC["x"], dirichlety = BC["y"], dirichletz = BC["z"])
 fesTensorP = MatrixValued(HDiv(mesh, order=ord-1))
 fes = fesU*fesTensorP
 u,P = fes.TrialFunction()
