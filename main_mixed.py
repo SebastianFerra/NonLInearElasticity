@@ -1,3 +1,5 @@
+ 
+
 from ngsolve import *
 from netgen.geom2d import SplineGeometry
 
@@ -19,7 +21,7 @@ chi = problem[0]['chi']
 G = problem[0]['G']
 geom = problem[1]
 BC = problem[2]
-h = 0.4
+h = 1
 ord = 2
 N = params.N
 KBTV = params.KBTV
@@ -57,35 +59,35 @@ def Gel_energy_mixed(F,v,P,T):
     J = Det(F)
     phi = phi0/J
     invF = Inv(F)
-    tens_eq = InnerProduct(gamma*F-(phi0/N)*invF+ log(1-phi)*J*invF + phi0*invF + (chi/J)*phi0**2*invF - P,T)
+    tens_eq = Trace((gamma*F - (phi0 / N) * invF + log(1 - phi) * J * invF + phi0 * invF + (chi/J) * (phi0**2) * invF - P).trans * T)
+    print("int")
     div_eq = InnerProduct(div(P),v) 
+    
     return tens_eq + div_eq
 
-    
-    return edp
 
 ## Generate spaces and forms
-fesU = VectorL2(mesh, order=ord, dirichletx = BC["x"], dirichlety = BC["y"], dirichletz = BC["z"])
-fesP = HDiv(mesh, order=ord-1)
-fesTensorP = FESpace([fesP, fesP, fesP])
-u = fesU.TrialFunction()
-v = fesU.TestFunction()
+fesU = VectorH1(mesh, order=ord, dirichletx = BC["x"], dirichlety = BC["y"], dirichletz = BC["z"])
+fesTensorP = MatrixValued(HDiv(mesh, order=ord-1))
+fes = fesU*fesTensorP
+u,P = fes.TrialFunction()
+v,T = fes.TestFunction()
 BF = BilinearForm(fes)
 F = Id(3) + Grad(u)
 
 ## Assemble forms
-def Assemble_Bilinear_Form(BF, F, form = "Mixed"):
-    if form == "Functional":
-        BF += Variation(Gel_energy_functional(F).Compile()*dx)
-        return BF
-    elif form == "EDP":
+def Assemble_Bilinear_Form(BF, F,v=None,P=None,T=None, form = "Mixed"):
+    
+    if form == "EDP":
         BF += Gel_energy_EDP(F).Compile() * dx
         return BF
     elif form == "Mixed":
-        BF += 
+        
+        BF += Gel_energy_mixed(F,v,P,T).Compile() * dx
+        
         return BF
 
-BF = Assemble_Bilinear_Form(BF, F, form)
+BF = Assemble_Bilinear_Form(BF, F)
 
 def Solver_freeswell(BF, gfu, tol=1e-8, maxiter=250, damp = 0.5):
     """
