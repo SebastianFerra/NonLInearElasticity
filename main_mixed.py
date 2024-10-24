@@ -57,7 +57,7 @@ def Gel_energy_EDP(F): ## |F|^2 + H => gamma F:Gradv + H'*J'
     edp = gamma * InnerProduct(F,dv) + H_prime * J * Trace(invF*dv)
     return edp
 
-def Gel_energy_mixed(u,v,Ptup,Ttup,Paux,Taux): ## |F|^2 + H => gamma F:Gradv + H'*J'
+def Gel_energy_mixed(u,v,Ptup,Ttup,Paux,Taux,lam,mu): ## |F|^2 + H => gamma F:Gradv + H'*J'
     F = Id(3) + Grad(u)
     gamma = G/KBTV
     J = Det(F)
@@ -65,49 +65,49 @@ def Gel_energy_mixed(u,v,Ptup,Ttup,Paux,Taux): ## |F|^2 + H => gamma F:Gradv + H
     invF = Inv(F)
     H_prime = -phi/N + log(1-phi) + phi + chi*phi**2
     # P = F+H_prime*J*F^{-T}
-    tens_eq = InnerProduct( H_prime*J*invF.trans - Paux , Taux)
-    temp = Trace(Taux) - InnerProduct(u, div_custom(Ttup))
-                        # trace(tau) + InnerProduct(\nabla u, tau)# integrar por partes
+    tens_eq = InnerProduct( gamma * F + H_prime * J * invF.trans - Paux , Taux)
+                       
     div_eq = InnerProduct(div_custom(Ptup),v) 
     # agregar int((u1,u2,0) * tau.n) = 0 (this only on BC z = 0)
-    return tens_eq + div_eq + temp
+    return tens_eq + div_eq + lam * u + mu * v 
 
 
 ## Generate spaces and forms
-fesU = VectorL2(mesh, order=ord)
-fesP1 = HDiv(mesh, order=ord+1, dirichlet = "top|right|back")
+fesU = VectorH1(mesh, order=ord)
+fesP1 = HDiv(mesh, order=ord+1, dirichlet = "top|right|back|front|left|bottom")
 fesP = FESpace([fesP1, fesP1, fesP1])
-fes = fesU * fesP
-u,P1,P2,P3 = fes.TrialFunction()
+R = NumberSpace(mesh)
+fes = fesU * fesP * R * R * R
+u,P1,P2,P3,mu1,mu2,mu3 = fes.TrialFunction()
 P = (P1,P2,P3)
-v,T1,T2,T3 = fes.TestFunction()
+v,T1,T2,T3,lam1,lam2,lam3 = fes.TestFunction()
 T = (T1,T2,T3)
 BF = BilinearForm(fes)
-F = Id(3) + Grad(u)
+
+lam = CF((lam1,lam2,lam3))
+mu = CF((mu1,mu2,mu3))
 
 ## Assemble forms
-def Assemble_Bilinear_Form(BF, u,v=None,P=None,T=None, form = "Mixed"):
-    F = Id(3) + Grad(u)
+def Assemble_Bilinear_Form(BF, u,v=None,P=None,T=None,lam=None,mu=None, form = "Mixed"):
     if form == "EDP":
         BF += Gel_energy_EDP(F).Compile() * dx
         return BF
     elif form == "Mixed":
-        Paux = CoefficientFunction((P[0],P[1],P[2]), dims = (3,3))
-        Taux = CoefficientFunction((T[0],T[1],T[2]), dims = (3,3))
-        
-        BF += Gel_energy_mixed(u,v,P,T,Paux,Taux).Compile() * dx
+        Paux = CoefficientFunction((P[0][0],P[0][1],P[0][2],P[1][0],P[1][1],P[1][2],P[2][0],P[2][1],P[2][2]), dims = (3,3))
+        Taux = CoefficientFunction((T[0][0],T[0][1],T[0][2],T[1][0],T[1][1],T[1][2],T[2][0],T[2][1],T[2][2]), dims = (3,3))
+        BF += Gel_energy_mixed(u,v,P,T,Paux,Taux,lam,mu).Compile() * dx
         # bottom, left, front
-        bot_u = CoefficientFunction((u[0],u[1],0))
-        left_u = CoefficientFunction((u[0],0,u[2]))
-        front_u = CoefficientFunction((0,u[1],u[2]))
-        ## add multiplication by normal explicitly?
-        BF += Taux*bot_u*ds(definedon = mesh.Boundaries("bottom"))
-        BF += Taux*left_u*ds(definedon = mesh.Boundaries("left"))
-        BF += Taux*front_u*ds(definedon = mesh.Boundaries("front"))
-        
+        # bot_u = CoefficientFunction((u[0],u[1],0))
+        # left_u = CoefficientFunction((u[0],0,u[2]))
+        # front_u = CoefficientFunction((0,u[1],u[2]))
+        # ## add multiplication by normal explicitly?
+        # BF += Taux*bot_u*ds(definedon = mesh.Boundaries("bottom"))
+        # BF += Taux*left_u*ds(definedon = mesh.Boundaries("left"))
+        # BF += Taux*front_u*ds(definedon = mesh.Boundaries("front"))
+        # add zero mean per component condition
         return BF
 
-BF = Assemble_Bilinear_Form(BF, u,v,P,T)
+BF = Assemble_Bilinear_Form(BF, u,v,P,T,lam,mu)
 
 def Solver_freeswell(BF, gfu, tol=1e-8, maxiter=250, damp = 0.5):
     """
@@ -147,8 +147,8 @@ print("Time on ngsolve newton:", abs(t1-time()))
 
 # pickle the results, history and mesh for later use
 #pickle.dump(history, open(f"Sol_Problem{problem[-1]}/history_{form}.p", "wb"))
-# pickle.dump(gfu, open(f"Sol_Problem{problem[-1]}/gfu_{form}.p", "wb"))
-# pickle.dump(mesh, open(f"Sol_Problem{problem[-1]}/mesh.p", "wb"))
+pickle.dump(gfu, open(f"Sol_Problem{problem[-1]}/gfu_{form}_mixed.p", "wb"))
+pickle.dump(mesh, open(f"Sol_Problem{problem[-1]}/mesh.p", "wb"))
 vtk = VTKOutput(ma=mesh, coefs=[gfu], names=["u"], filename=f"freeswekk_EDP_{h}", subdivision=0)
 vtk.Do() 
 
