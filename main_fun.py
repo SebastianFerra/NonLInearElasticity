@@ -21,11 +21,11 @@ geom = problem[1]
 dim = problem[0]['dim']
 BC = problem[2]
 name = problem[-1]
-h = 0.4
+h = 1
 ord = 2
 N = params.N
 KBTV = params.KBTV
-form = "EDP" # EDP //functional
+form = "Functional" # EDP //functional
 
 
 phi = lambda J: phi0/J
@@ -36,10 +36,10 @@ gammafun = lambda lamb: -dH(lamb**3)*lamb
 
 lambda_target = 1.49
 gamma_target = gammafun(lambda_target)
-G_target = gamma_target*KBTV
-print("G_target: ", G_target)
-gamma = Parameter(G/KBTV)
 
+
+gamma = Parameter(gamma_target)
+print(gamma)
 ## Generate mesh and geometry ### add parallel stuff
 def mesher(geom, h):
     if ".stp" in geom:
@@ -58,7 +58,7 @@ def Norm(vec):
     return InnerProduct(vec, vec)**0.5
 
 def Gel_energy_functional(F):
-    gamma = G/KBTV
+    
     J = Det(F)
     phi = phi0/J
     H = (J - phi0)*log(1-phi)  + phi0 * chi*(1-phi) + phi0/1000*log(phi)
@@ -79,7 +79,9 @@ def Gel_energy_EDP(F): ## |F|^2 + H => gamma F:Gradv + H'*J'
 if BC["dir_cond"] == "faces":
     fes = VectorH1(mesh, order=ord, dirichlet = BC["DIR_FACES"])
 elif BC["dir_cond"] == "components":
-    fes = VectorH1(mesh, order=ord, dirichletx = BC["x"], dirichlety = BC["y"], dirichletz = BC["z"], dirichlet = BC["DIR_FACES"])
+    fes = VectorH1(mesh, order=ord, dirichletx = BC["x"], dirichlety = BC["y"], dirichletz = BC["z"])
+
+
 u = fes.TrialFunction()
 v = fes.TestFunction()
 BF = BilinearForm(fes)
@@ -127,29 +129,28 @@ def Solver_freeswell(BF, gfu, tol=1e-8, maxiter=250, damp = 0.5):
     return gfu, history, conv
 
 
-def Solver_Bonded(BF, gfu, tol=1e-8, maxiter=250, damp = 0.5):
+def Solver_Bonded(BF, gfu, tol=1e-8, maxiter=250, damp = 0.2):
     res = gfu.vec.CreateVector()
     du  = gfu.vec.CreateVector()
-    for loadstep in np.linspace(0.001,G_target,10):
-        print("Loadstep: ", loadstep)
+    for loadstep in np.linspace(0.000114552,gamma_target,50):
         gamma.Set(loadstep)
+        print(gamma)
         for it in range(maxiter):
             print ("Newton iteration {:3}".format(it),end=", ")
-            print ("energy = {:16}".format(fes.Energy(gfu.vec)),end="")
+            print ("energy = {:16}".format(BF.Energy(gfu.vec)),"Residual: ", sqrt(abs(InnerProduct(res,res))))
+            if np.isnan(BF.Energy(gfu.vec)):
+                print("Nan")
+                conv = 0
+                return gfu, None, conv
             #solve linearized problem:
             BF.Apply (gfu.vec, res)
             BF.AssembleLinearization (gfu.vec)
-            inv = BF.mat.Inverse(V.FreeDofs())
-            alpha = 5e-1
-            du.data = alpha * inv * res
+            inv = BF.mat.Inverse(fes.FreeDofs())
+            du.data = damp * inv * res
 
             #update iteration
             gfu.vec.data -= du
-
-            #stopping criteria
-            stopcritval = sqrt(abs(InnerProduct(du,res)))
-            if stopcritval < tol:
-                break
+    return gfu, None, 1
 
 def petsc_solver(fes, BL, gfu):
     solver = NonLinearSolver(fes = fes,a = BF,solverParameters={"snes_type": "qn",
@@ -166,22 +167,23 @@ gfu = GridFunction(fes)
 gfu.vec[:] = 0
 t1 =  time()
 
-
-gfu, history, conv = Solver_freeswell(BF, gfu)
+## Solve the problem
+if problem[-2] in problems.bonded:
+    print("Solving bonded problem")
+    gfu, history, conv = Solver_Bonded(BF, gfu)
+elif problem[-2] in problems.free_swell:
+    print("Solving free swell problem")
+    gfu, history, conv = Solver_freeswell(BF, gfu)
 if conv == 0:
     print("Did not converge")
 else:
 
  print("Time on ngsolve newton:", abs(t1-time()))
 
-#gfu = GridFunction(fes)
-# #gfu.vec[:] = 0
-# t1 = time() 
-# gfu = petsc_solver(fes,BF, gfu)
-# print("Time on snes newton:", abs(t1-time()))
-
-# pickle the results, history and mesh for later use
-#pickle.dump(history, open(f"Sol_Problem{problem[-1]}/history_{form}.p", "wb"))
+## Save the solution
+"""
+The following files can be visualized on the viewer.ipynb file
+"""
 pickle.dump(gfu, open(f"Sol_Problem{problem[-2]}/gfu.p", "wb"))
 pickle.dump(mesh, open(f"Sol_Problem{problem[-2]}/mesh.p", "wb"))
 vtk = VTKOutput(ma=mesh, coefs=[gfu], names=["u"], filename=f"{name}_{h}", subdivision=0)
