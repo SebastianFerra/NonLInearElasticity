@@ -1,7 +1,7 @@
 # import netgen 
 from netgen.occ import *
 from netgen.csg import *
-
+from netgen.geom2d import SplineGeometry
 ## problem 1
 # create a box
 d = 23.5
@@ -19,18 +19,24 @@ box.faces.Min(Z).name = "left"
 L = 90
 d = 23.5
 L3 = 3.0
-
-left  = Plane (Pnt(0,0,0), Vec(-1,0,0) ).bc('left')
-right = Plane (Pnt(0.5*L,0,0), Vec( 1,0,0) )
-bot = Plane (Pnt(0,0,0), Vec(0,-1,0) ).bc('bot')
-top  = Plane (Pnt(0,0.5*d,0), Vec(0, 1,0) )
-back   = Plane (Pnt(0,0,0), Vec(0,0,-1) ).bc('back')
-front   = Plane (Pnt(0,0,0.5*L3), Vec(0,0, 1) )
-
-brick = left * right * front * back * bot * top
-
-geo = CSGeometry()
-geo.Add (brick)
-
 box.WriteStep("geo.stp")
+
+
+# Problem 2
+w = 3.0
+l = 15
+
+rect = SplineGeometry()
+pnts = [(0,0), (l,0), (l,w), (0,w)]
+p1,p2,p3,p4 = [rect.AppendPoint(*pnt) for pnt in pnts]
+curves = [[["line",p1,p2],"bottom"],
+        [["line",p2,p3],"right"],
+        [["line",p3,p4],"top"],
+        [["line",p4,p1],"left"]]
+[rect.Append(c,bc=bc, leftdomain=1, rightdomain=0) for c,bc in curves]
+
+# save the geometry
+import pickle   
+with open("geo_2D_bonded.pkl", "wb") as f:
+    pickle.dump(rect, f)
 

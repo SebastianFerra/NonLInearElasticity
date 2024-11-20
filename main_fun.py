@@ -12,13 +12,15 @@ import pickle
 from time import time
 
 ## get problem parameters and geometry
-problem = problems.problem1
+problem = problems.problem2
 
 phi0 = problem[0]['phi0']
 chi = problem[0]['chi']
 G = problem[0]['G']
 geom = problem[1]
+dim = problem[0]['dim']
 BC = problem[2]
+name = problem[-1]
 h = 0.4
 ord = 2
 N = params.N
@@ -27,12 +29,18 @@ form = "EDP" # EDP //functional
 
 ## Generate mesh and geometry ### add parallel stuff
 def mesher(geom, h):
-    geo = OCCGeometry(geom)
+    if ".stp" in geom:
+        geo = OCCGeometry(geom)
+    else:
+        geo = pickle.load(open(geom, "rb"))
+
     mesh = Mesh(geo.GenerateMesh(maxh=h))
+    Draw(mesh)
     return mesh
 mesh = mesher(geom, h)
 def F(u):
-    return Id(3) + Grad(u)
+
+    return Id(dim) + Grad(u)
 def Norm(vec):
     return InnerProduct(vec, vec)**0.5
 
@@ -55,11 +63,14 @@ def Gel_energy_EDP(F): ## |F|^2 + H => gamma F:Gradv + H'*J'
     return edp
 
 ## Generate spaces and forms
-fes = VectorH1(mesh, order=ord, dirichletx = BC["x"], dirichlety = BC["y"], dirichletz = BC["z"])
+if BC["dir_cond"] == "faces":
+    fes = VectorH1(mesh, order=ord, dirichlet = BC["DIR_FACES"])
+elif BC["dir_cond"] == "components":
+    fes = VectorH1(mesh, order=ord, dirichletx = BC["x"], dirichlety = BC["y"], dirichletz = BC["z"], dirichlet = BC["DIR_FACES"])
 u = fes.TrialFunction()
 v = fes.TestFunction()
 BF = BilinearForm(fes)
-F = Id(3) + Grad(u)
+F = Id(dim) + Grad(u)
 
 ## Assemble forms
 def Assemble_Bilinear_Form(BF, F, form):
@@ -81,10 +92,16 @@ def Solver_freeswell(BF, gfu, tol=1e-8, maxiter=250, damp = 0.5):
     w = gfu.vec.CreateVector()
     history = GridFunction(fes, multidim = 0)
     # here we may need to add another loop
-   
+    conv = 1
     for iter in range(maxiter):
         # Prints before the iteration: number of it, residual, energy
         print("Energy: ", BF.Energy(gfu.vec), "Residual: ", sqrt(abs(InnerProduct(res,res))), "Iteration: ", iter)
+        # Check if energy is not a number
+        if np.isnan(BF.Energy(gfu.vec)):
+            print("Nan")
+            conv = 0
+            break
+
         BF.Apply(gfu.vec, res)
         BF.AssembleLinearization(gfu.vec)
         inv = BF.mat.Inverse(freedofs = fes.FreeDofs())        
@@ -94,7 +111,7 @@ def Solver_freeswell(BF, gfu, tol=1e-8, maxiter=250, damp = 0.5):
         if sqrt(abs(InnerProduct(w,res))) < tol:
             print("Converged")
             break
-    return gfu, history
+    return gfu, history, conv
 
 def petsc_solver(fes, BL, gfu):
     solver = NonLinearSolver(fes = fes,a = BF,solverParameters={"snes_type": "qn",
@@ -110,8 +127,12 @@ def petsc_solver(fes, BL, gfu):
 gfu = GridFunction(fes)
 gfu.vec[:] = 0
 t1 =  time()
-gfu, history = Solver_freeswell(BF, gfu)
-print("Time on ngsolve newton:", abs(t1-time()))
+gfu, history, conv = Solver_freeswell(BF, gfu)
+if conv == 0:
+    print("Did not converge")
+else:
+
+ print("Time on ngsolve newton:", abs(t1-time()))
 
 #gfu = GridFunction(fes)
 # #gfu.vec[:] = 0
@@ -121,8 +142,8 @@ print("Time on ngsolve newton:", abs(t1-time()))
 
 # pickle the results, history and mesh for later use
 #pickle.dump(history, open(f"Sol_Problem{problem[-1]}/history_{form}.p", "wb"))
-# pickle.dump(gfu, open(f"Sol_Problem{problem[-1]}/gfu_{form}.p", "wb"))
-# pickle.dump(mesh, open(f"Sol_Problem{problem[-1]}/mesh.p", "wb"))
-vtk = VTKOutput(ma=mesh, coefs=[gfu], names=["u"], filename=f"freeswekk_EDP_{h}", subdivision=0)
+pickle.dump(gfu, open(f"Sol_Problem{problem[-2]}/gfu.p", "wb"))
+pickle.dump(mesh, open(f"Sol_Problem{problem[-2]}/mesh.p", "wb"))
+vtk = VTKOutput(ma=mesh, coefs=[gfu], names=["u"], filename=f"{name}_{h}", subdivision=0)
 vtk.Do() 
 
