@@ -27,6 +27,19 @@ N = params.N
 KBTV = params.KBTV
 form = "EDP" # EDP //functional
 
+
+phi = lambda J: phi0/J
+dH = lambda J: (1-1/1000) * phi(J) + np.log(1-phi(J)) + chi * phi(J)**2
+
+#gammafun = lambda lamb: -dH(lamb)/lamb # bonded
+gammafun = lambda lamb: -dH(lamb**3)*lamb
+
+lambda_target = 1.49
+gamma_target = gammafun(lambda_target)
+G_target = gamma_target*KBTV
+print("G_target: ", G_target)
+gamma = Parameter(G/KBTV)
+
 ## Generate mesh and geometry ### add parallel stuff
 def mesher(geom, h):
     if ".stp" in geom:
@@ -37,7 +50,7 @@ def mesher(geom, h):
     mesh = Mesh(geo.GenerateMesh(maxh=h))
     Draw(mesh)
     return mesh
-mesh = mesher(geom, h)
+mesh = mesher(geom, h)  
 def F(u):
 
     return Id(dim) + Grad(u)
@@ -53,7 +66,7 @@ def Gel_energy_functional(F):
 
 def Gel_energy_EDP(F): ## |F|^2 + H => gamma F:Gradv + H'*J'
     # ddet(A(t))/dt = det(A(t))*trace(A^-1(t)*Grad (v))
-    gamma = G/KBTV
+    
     J = Det(F)
     phi = phi0/J
     dv = Grad(v)
@@ -113,6 +126,31 @@ def Solver_freeswell(BF, gfu, tol=1e-8, maxiter=250, damp = 0.5):
             break
     return gfu, history, conv
 
+
+def Solver_Bonded(BF, gfu, tol=1e-8, maxiter=250, damp = 0.5):
+    res = gfu.vec.CreateVector()
+    du  = gfu.vec.CreateVector()
+    for loadstep in np.linspace(0.001,G_target,10):
+        print("Loadstep: ", loadstep)
+        gamma.Set(loadstep)
+        for it in range(maxiter):
+            print ("Newton iteration {:3}".format(it),end=", ")
+            print ("energy = {:16}".format(fes.Energy(gfu.vec)),end="")
+            #solve linearized problem:
+            BF.Apply (gfu.vec, res)
+            BF.AssembleLinearization (gfu.vec)
+            inv = BF.mat.Inverse(V.FreeDofs())
+            alpha = 5e-1
+            du.data = alpha * inv * res
+
+            #update iteration
+            gfu.vec.data -= du
+
+            #stopping criteria
+            stopcritval = sqrt(abs(InnerProduct(du,res)))
+            if stopcritval < tol:
+                break
+
 def petsc_solver(fes, BL, gfu):
     solver = NonLinearSolver(fes = fes,a = BF,solverParameters={"snes_type": "qn",
                                             "snes_max_it": 2000,
@@ -127,6 +165,8 @@ def petsc_solver(fes, BL, gfu):
 gfu = GridFunction(fes)
 gfu.vec[:] = 0
 t1 =  time()
+
+
 gfu, history, conv = Solver_freeswell(BF, gfu)
 if conv == 0:
     print("Did not converge")
