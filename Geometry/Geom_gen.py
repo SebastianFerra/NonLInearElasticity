@@ -19,7 +19,7 @@ box.faces.Min(Z).name = "left"
 L = 90
 d = 23.5
 L3 = 3.0
-box.WriteStep("geo.stp")
+box.WriteStep("geo_3D_bonded.stp")
 
 
 # Problem 2
