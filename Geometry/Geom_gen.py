@@ -40,3 +40,25 @@ import pickle
 with open("geo_2D_bonded.pkl", "wb") as f:
     pickle.dump(rect, f)
 
+
+# Problem 4
+w = 5.0
+l = 90
+delta = 0.9
+rect = SplineGeometry()
+pnts = [(0,0), (l*(1-delta)/2,0), (l*(delta + (1-delta)/2),0),(l,0), (l,w), (0,w)]
+p1,p2,p3,p4,p5,p6 = [rect.AppendPoint(*pnt) for pnt in pnts]
+curves = [[["line",p1,p2],"left_wing"],
+          [["line",p2,p3],"delta_face"],
+          [["line",p3,p4],"right_wing"],
+        [["line",p4,p5],"right"],
+        [["line",p5,p6],"top"],
+        [["line",p6,p1],"left"]]
+[rect.Append(c,bc=bc, leftdomain=1, rightdomain=0) for c,bc in curves]
+
+# save the geometry
+import pickle   
+with open("geo_2D_bonded_delta90.pkl", "wb") as f:
+    pickle.dump(rect, f)
+
+
