@@ -1,0 +1,1 @@
+Theses meshes have approximately 30k points and with H1 element of order 2 give aprox. 600k degrees of freedom
